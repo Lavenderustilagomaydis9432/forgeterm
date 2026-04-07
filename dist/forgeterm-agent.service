@@ -1,0 +1,25 @@
+[Unit]
+Description=Forgeterm Guardian Agent - AI CLI monitor daemon
+Documentation=https://github.com/diemoeve/forgeterm
+After=default.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/forgeterm-agent
+Restart=on-failure
+RestartSec=5
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=forgeterm-agent
+
+# Sandboxing
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%h/.local/share/forgeterm %h/.config/forgeterm
+PrivateTmp=true
+
+[Install]
+WantedBy=default.target

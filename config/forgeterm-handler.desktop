@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Forgeterm Event Handler
+Comment=Opens Forgeterm TUI focused on a specific event
+Exec=forgeterm --focus-event %u
+NoDisplay=true
+MimeType=x-scheme-handler/forgeterm
+Categories=Utility;
+Terminal=true

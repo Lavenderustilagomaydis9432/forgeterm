@@ -1,0 +1,15 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/agent",
+    "crates/cli",
+    "crates/shared",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+repository = "https://github.com/diemoeve/forgeterm"
+keywords = ["ai", "security", "monitoring", "cli", "tui"]
+categories = ["command-line-utilities", "development-tools"]
