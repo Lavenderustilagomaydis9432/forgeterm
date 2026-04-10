@@ -172,6 +172,12 @@ pub struct FileAccessRule {
     /// Short explanation shown in TUI when this is expected behavior.
     #[serde(default)]
     pub known_safe: Option<String>,
+    /// When a tracked session whose CLI type is in this list reads a
+    /// matching path, the event severity is downgraded to Info. Unknown
+    /// readers, children of tracked sessions, and unattributed inotify
+    /// fallbacks keep the original severity.
+    #[serde(default)]
+    pub known_safe_for: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

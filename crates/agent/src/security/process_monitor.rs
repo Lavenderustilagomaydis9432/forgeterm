@@ -370,6 +370,6 @@ mod tests {
         let suspicious = SUSPICIOUS_BINARIES;
         assert!(suspicious.contains(&"nc"));
         assert!(suspicious.contains(&"python3"));
-        assert!(!suspicious.iter().any(|s| *s == "cargo"));
+        assert!(!suspicious.contains(&"cargo"));
     }
 }

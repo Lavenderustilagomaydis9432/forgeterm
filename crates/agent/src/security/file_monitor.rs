@@ -6,7 +6,7 @@ use tracing::debug;
 
 use forgeterm_shared::types::{CliType, Signal};
 
-use super::rules::SecurityRules;
+use super::rules::{self, SecurityRules};
 
 /// Scan open file descriptors of a process and check against security rules.
 /// Returns security signals for any sensitive file access or boundary violations.
@@ -30,17 +30,21 @@ pub fn scan_fds(
             }
         }
 
-        // Check against sensitive file rules
-        if let Some((rule_name, severity, known_safe)) = rules.match_file(file_path) {
+        // Check against sensitive file rules.
+        // scan_fds scans the session PID's own FDs, so attribution is
+        // positive: pass Some(cli_type) as the accessor.
+        if let Some(rule) = rules.match_file(file_path) {
             already_seen.insert(file_path.clone(), Instant::now());
+            let (severity, downgrade_reason) = rules::effective_severity(rule, Some(cli_type));
+            let known_safe = downgrade_reason.or_else(|| rule.known_safe.clone());
             signals.push(Signal::SensitiveFileAccess {
                 session_id,
                 pid,
                 cli_type: cli_type.clone(),
                 path: file_path.clone(),
-                rule_name: rule_name.to_string(),
-                severity: severity.clone(),
-                known_safe: known_safe.map(String::from),
+                rule_name: rule.name.clone(),
+                severity,
+                known_safe,
             });
             continue;
         }
@@ -71,41 +75,50 @@ pub fn check_inotify_access(
 ) -> Vec<Signal> {
     let mut signals = Vec::new();
 
-    let (rule_name, severity, known_safe) = match rules.match_file(path) {
-        Some(m) => m,
+    let rule = match rules.match_file(path) {
+        Some(r) => r,
         None => return signals,
     };
-    let known_safe_owned = known_safe.map(String::from);
 
-    // Try to find which tracked PID has the file open
+    // Try to find which tracked PID has the file open. A positive
+    // match means the session's own PID holds the FD — accessor is
+    // Some(cli_type), so per-CLI downgrading applies.
     let mut attributed = false;
     for (pid, session_id, cli_type) in tracked_pids {
         if pid_has_file_open(*pid, path) {
+            let (severity, downgrade_reason) = rules::effective_severity(rule, Some(cli_type));
+            let known_safe = downgrade_reason.or_else(|| rule.known_safe.clone());
             signals.push(Signal::SensitiveFileAccess {
                 session_id: *session_id,
                 pid: *pid,
                 cli_type: cli_type.clone(),
                 path: path.to_path_buf(),
-                rule_name: rule_name.to_string(),
-                severity: severity.clone(),
-                known_safe: known_safe_owned.clone(),
+                rule_name: rule.name.clone(),
+                severity,
+                known_safe,
             });
             attributed = true;
         }
     }
 
-    // If no PID match (short-lived access), attribute to first active session only.
-    // Attributing to all sessions caused notification floods (N sessions x M files).
+    // Fallback: no tracked PID currently holds the file (short-lived
+    // access like `cat file > /dev/null`, or an untracked child read).
+    // Attribute to the first active session for display context, but
+    // pass None as the accessor — we can't prove who actually read the
+    // file, so the raw severity stands. Downgrading here would open a
+    // supply chain blind spot.
     if !attributed {
         if let Some((pid, session_id, cli_type)) = tracked_pids.first() {
+            let (severity, _) = rules::effective_severity(rule, None);
+            let known_safe = rule.known_safe.clone();
             signals.push(Signal::SensitiveFileAccess {
                 session_id: *session_id,
                 pid: *pid,
                 cli_type: cli_type.clone(),
                 path: path.to_path_buf(),
-                rule_name: rule_name.to_string(),
-                severity: severity.clone(),
-                known_safe: known_safe_owned,
+                rule_name: rule.name.clone(),
+                severity,
+                known_safe,
             });
         }
     }
@@ -377,6 +390,9 @@ pub fn setup_kqueue(watch_dirs: &[PathBuf]) -> Option<(kqueue::Watcher, Vec<Path
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::security::rules::{FileRule, SecurityRules};
+    use forgeterm_shared::types::Severity;
+    use std::collections::HashSet;
 
     #[test]
     fn user_file_filter() {
@@ -386,10 +402,53 @@ mod tests {
         assert!(is_user_file(Path::new("/etc/shadow")));
     }
 
+    // is_write_fd reads from /proc/<pid>/fdinfo and is exercised by
+    // the scan_fds integration path against the running process table;
+    // no meaningful unit test in isolation.
+
+    fn rules_with_downgradable_critical(path: &Path) -> SecurityRules {
+        SecurityRules {
+            file_rules: vec![FileRule {
+                name: "Credential file".into(),
+                paths: vec![path.to_path_buf()],
+                severity: Severity::Critical,
+                known_safe: None,
+                known_safe_for: Some(vec![CliType::ClaudeCode]),
+            }],
+            allowed_ips: HashSet::new(),
+            command_rules: Vec::new(),
+        }
+    }
+
     #[test]
-    fn write_fd_parsing() {
-        // is_write_fd reads from /proc, tested implicitly in integration
-        // This test validates the logic concept
-        assert!(true);
+    fn inotify_fallback_does_not_downgrade() {
+        // Use a path that definitely has no FD open anywhere, so
+        // pid_has_file_open returns false for every tracked PID and
+        // the fallback branch fires.
+        let synthetic = PathBuf::from("/nonexistent/forgeterm/s20/aws_credentials");
+        let rules = rules_with_downgradable_critical(&synthetic);
+        // Bogus tracked PID (0) so pid_has_file_open returns false.
+        let tracked: Vec<(u32, u64, CliType)> = vec![(0, 42, CliType::ClaudeCode)];
+
+        let signals = check_inotify_access(&synthetic, &tracked, &rules);
+        assert_eq!(signals.len(), 1, "expected one fallback signal");
+        match &signals[0] {
+            Signal::SensitiveFileAccess {
+                severity,
+                known_safe,
+                ..
+            } => {
+                assert_eq!(
+                    *severity,
+                    Severity::Critical,
+                    "fallback attribution must NOT downgrade — supply chain safety"
+                );
+                assert!(
+                    known_safe.is_none(),
+                    "no downgrade reason should be attached in the fallback path"
+                );
+            }
+            other => panic!("expected SensitiveFileAccess, got {other:?}"),
+        }
     }
 }

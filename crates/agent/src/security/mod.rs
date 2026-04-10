@@ -341,12 +341,14 @@ pub async fn security_monitor_loop(
                         &mut ts.seen_files,
                         dedup_window,
                     );
+                    // Correlation uses the rule's raw severity via
+                    // is_exfil_relevant, not the signal's effective
+                    // severity. That way downgrades for known-safe
+                    // CLIs silence individual alerts without breaking
+                    // exfil detection for the same files.
                     for sig in &file_signals {
-                        if let Signal::SensitiveFileAccess {
-                            path, severity, ..
-                        } = sig
-                        {
-                            if *severity != Severity::Info {
+                        if let Signal::SensitiveFileAccess { path, .. } = sig {
+                            if rules.is_exfil_relevant(path) {
                                 correlation.record_file_access(ts.session.id, path);
                             }
                         }
@@ -494,7 +496,7 @@ fn process_inotify_events(
                     }
                     let inotify_signals =
                         file_monitor::check_inotify_access(file_path, &tracked_pids, rules);
-                    record_file_correlations(&inotify_signals, correlation);
+                    record_file_correlations(&inotify_signals, correlation, rules);
                     signals.extend(inotify_signals);
                     matched_file = true;
                     break;
@@ -515,7 +517,7 @@ fn process_inotify_events(
                                 &tracked_pids,
                                 rules,
                             );
-                            record_file_correlations(&inotify_signals, correlation);
+                            record_file_correlations(&inotify_signals, correlation, rules);
                             signals.extend(inotify_signals);
                             break;
                         }
@@ -579,19 +581,23 @@ fn is_inotify_dedup(
 }
 
 /// Record file accesses from signals into the correlation tracker.
-/// Only records Warning/Critical severity: Info-level accesses (e.g. /etc/passwd)
-/// are benign and should not trigger exfiltration correlation.
+/// Uses `rules.is_exfil_relevant(path)` rather than the signal's own
+/// severity so that per-CLI downgrades (Info) don't drop the file
+/// access from exfil correlation — the raw rule severity is what
+/// determines credential-grade relevance, not the effective severity
+/// after accessor attribution.
 #[cfg(target_os = "linux")]
-fn record_file_correlations(signals: &[Signal], correlation: &mut CorrelationTracker) {
+fn record_file_correlations(
+    signals: &[Signal],
+    correlation: &mut CorrelationTracker,
+    rules: &SecurityRules,
+) {
     for sig in signals {
         if let Signal::SensitiveFileAccess {
-            path,
-            session_id,
-            severity,
-            ..
+            path, session_id, ..
         } = sig
         {
-            if *severity != Severity::Info {
+            if rules.is_exfil_relevant(path) {
                 correlation.record_file_access(*session_id, path);
             }
         }
@@ -934,6 +940,43 @@ mod tests {
         assert_ne!(
             key1, key2,
             "Different sessions must produce different dedup keys"
+        );
+    }
+
+    #[test]
+    fn is_exfil_relevant_survives_known_safe_for_downgrade() {
+        // A Critical rule with known_safe_for populated must still be
+        // exfil-relevant: downgrading an individual file-read alert
+        // for a whitelisted CLI should NOT suppress the cross-signal
+        // exfil correlation.
+        use crate::security::rules::{FileRule, SecurityRules};
+        use std::collections::HashSet;
+
+        let target = PathBuf::from("/home/test/.aws/credentials");
+        let rules = SecurityRules {
+            file_rules: vec![FileRule {
+                name: "AWS credentials".into(),
+                paths: vec![target.clone()],
+                severity: Severity::Critical,
+                known_safe: None,
+                known_safe_for: Some(vec![CliType::ClaudeCode]),
+            }],
+            allowed_ips: HashSet::new(),
+            command_rules: Vec::new(),
+        };
+
+        assert!(
+            rules.is_exfil_relevant(&target),
+            "downgrade-eligible Critical rule must stay exfil-relevant"
+        );
+
+        // And an actual correlation + check_exfil round still fires.
+        let mut tracker = CorrelationTracker::new(10, Duration::from_secs(300));
+        tracker.record_file_access(1, &target);
+        let result = tracker.check_exfil(1, 100, &CliType::ClaudeCode, "8.8.8.8");
+        assert!(
+            result.is_some(),
+            "exfil correlation must fire even when individual alert would be downgraded"
         );
     }
 }

@@ -23,6 +23,7 @@ severity = "Info"
 name = "AWS credentials"
 paths = ["~/.aws/credentials", "~/.aws/config"]
 severity = "Critical"
+known_safe_for = ["ClaudeCode", "Codex", "Cursor"]
 
 [[file_access]]
 name = "GPG keys"
@@ -113,12 +114,14 @@ known_safe = "Normal: Node.js and many tools read /proc/self/environ on startup.
 name = "Package manager tokens"
 paths = ["~/.npmrc", "~/.pypirc", "~/.yarnrc"]
 severity = "Critical"
+known_safe_for = ["ClaudeCode", "Codex", "Cursor"]
 
 [[file_access]]
 name = "GitHub CLI config"
 paths = ["~/.config/gh/hosts.yml"]
 severity = "Warning"
 known_safe = "Normal: Claude Code reads GitHub CLI config for authentication. Expected during git operations."
+known_safe_for = ["ClaudeCode", "Codex", "Cursor"]
 
 [[file_access]]
 name = "Cloud credentials"
